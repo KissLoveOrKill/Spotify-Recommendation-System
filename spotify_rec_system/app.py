@@ -241,20 +241,24 @@ def recommend():
         tracks.extend(results['items'])
         
     # 2. Extract Track IDs
-    track_ids = []
+    seed_infos = []
     for item in tracks:
         # Ensure it's a track (not episode), has an ID, and is not a local file
         if (item['track'] and 
             item['track']['id'] and 
             item['track']['type'] == 'track' and 
             not item['track'].get('is_local', False)):
-            track_ids.append(item['track']['id'])
+            seed_infos.append({
+                'id': item['track']['id'],
+                'name': item['track']['name'],
+                'artist': item['track']['artists'][0]['name'] if item['track'].get('artists') else None
+            })
             
     if not track_ids:
         return render_template('error.html', message="该歌单似乎是空的，或者包含的歌曲无法被 Spotify 识别（例如本地文件）。<br>请尝试选择另一个歌单。")
 
     # Limit to analyzing first 100 tracks to avoid rate limits and slowness for this demo
-    track_ids = track_ids[:100]
+    seed_infos = seed_infos[:100]
     
     # 3. 使用全局推荐引擎 (Global Recommender)
     # from recommender import ContentBasedRecommender
@@ -264,7 +268,7 @@ def recommend():
     try:
         # 传入所有 track_ids 作为种子，让算法自己计算平均值
         # 注意：算法内部会过滤掉不在数据库中的 ID
-        rec_results = global_recommender.recommend(track_ids, limit=50)
+        rec_results = global_recommender.recommend(seed_infos, limit=50)
         
         rec_tracks = []
         if rec_results:
@@ -477,6 +481,7 @@ def recommend_from_playlist():
         from recommender import ContentBasedRecommender
         recommender = ContentBasedRecommender()
         
+        # For playlist wrapper we can pass simple id list (backwards compatible)
         rec_results = recommender.recommend(track_ids, limit=50)
         
         rec_tracks = []

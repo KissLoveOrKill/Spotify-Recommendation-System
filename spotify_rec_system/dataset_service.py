@@ -105,11 +105,13 @@ class SpotifyDataset:
                 for _, row in potential_matches.iterrows():
                     db_artist = str(row['artist_name']).lower()
                     if target_artist in db_artist or db_artist in target_artist:
-                        return self._row_to_dict(row)
-                
+                        # 返回完整行字典，包含 'id' 以供上层匹配使用
+                        return row.to_dict()
+
                 return None
             else:
-                return self._row_to_dict(matches.iloc[0])
+                # 返回完整行字典，包含 'id' 以供上层匹配使用
+                return matches.iloc[0].to_dict()
                 
         except Exception as e:
             print(f"[WARN] 按名称查找失败: {e}")

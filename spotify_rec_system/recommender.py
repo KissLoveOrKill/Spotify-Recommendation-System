@@ -236,25 +236,77 @@ class ContentBasedRecommender:
         print(f"[SUCCESS] 推荐系统就绪。已索引 {len(self.df)} 首歌曲。")
         self._update_progress(100, "初始化完成！")
 
-    def recommend(self, seed_track_ids, limit=50):
+    def recommend(self, seed_track_infos, limit=50):
         """
         基于 MLP Autoencoder 的推荐 (Max Similarity Strategy)
+        支持两种输入格式：
+        - 列表字符串 id：['id1','id2',...]
+        - 列表字典：[{ 'id':..., 'name':..., 'artist':... }, ...]
         """
         print("\n" + "="*50)
         print("启动智能推荐流程 (MLP Autoencoder - Max Sim)")
         print("="*50)
 
-        if self.df is None or self.embeddings is None or not seed_track_ids:
+        if self.df is None or self.embeddings is None or not seed_track_infos:
             return []
 
         # 1. Input
-        seed_mask = self.df.index.isin(seed_track_ids)
+        # 兼容老的只传 id 的调用
+        seed_ids = []
+        # If input is list of strings
+        if isinstance(seed_track_infos, (list, tuple)) and seed_track_infos and isinstance(seed_track_infos[0], str):
+            seed_ids = [str(x) for x in seed_track_infos]
+        else:
+            # Expect list of dicts with possible keys 'id','name','artist'
+            for item in seed_track_infos:
+                if not item:
+                    continue
+                if isinstance(item, dict) and item.get('id'):
+                    seed_ids.append(str(item.get('id')))
+                else:
+                    # fallback: ignore
+                    continue
+
+        # Normalize to strings
+        seed_ids = [str(x) for x in seed_ids]
+
+        # Check which seed ids exist in dataset
+        seed_mask = self.df.index.isin(seed_ids)
+
+        # If some provided ids are not found, attempt to fallback by name+artist when available
+        missing_ids = [sid for sid in seed_ids if sid not in list(self.df.index)]
+        if missing_ids:
+            # Build a map from provided infos if available
+            id_map = {}
+            if isinstance(seed_track_infos, (list, tuple)):
+                for item in seed_track_infos:
+                    if isinstance(item, dict):
+                        _id = item.get('id')
+                        name = item.get('name')
+                        artist = item.get('artist')
+                        if _id and str(_id) in missing_ids and name and artist:
+                            id_map[str(_id)] = (name, artist)
+
+            from dataset_service import SpotifyDataset
+            ds = SpotifyDataset.get_instance()
+            for mid in missing_ids:
+                if mid in id_map:
+                    name, artist = id_map[mid]
+                    try:
+                        row = ds.get_track_features_by_name(name, artist)
+                        if row and row.get('id'):
+                            found_id = str(row.get('id'))
+                            seed_ids.append(found_id)
+                    except Exception:
+                        pass
+
+        # Recompute mask after possible fallbacks
+        seed_mask = self.df.index.isin(seed_ids)
         if not np.any(seed_mask):
             print("[WARN] 歌单中的歌曲未在数据库中找到。")
             return self.df.sample(limit).to_dict('records')
 
         print(f"[Step 1] 输入分析: 识别到 {np.sum(seed_mask)} 首有效种子歌曲。")
-
         # 2. Latent Mapping
         seed_vectors = self.embeddings[seed_mask]
         print(f"[Step 2] 深度编码: 已将种子歌曲映射到 32维 潜在风格空间。")
