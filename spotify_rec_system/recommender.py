@@ -8,6 +8,19 @@ from torch.utils.data import DataLoader, TensorDataset
 import os
 import pickle
 import time
+import logging
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configure module logger
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('[%(levelname)s] %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(os.getenv('RECOMMENDER_LOG_LEVEL', 'INFO'))
 
 # --- 1. 定义 MLP Autoencoder ---
 
@@ -48,7 +61,7 @@ class Autoencoder(nn.Module):
 # --- 2. 推荐系统核心类 ---
 
 class ContentBasedRecommender:
-    def __init__(self, progress_callback=None):
+    def __init__(self, progress_callback=None, fallback_loose=None):
         self.progress_callback = progress_callback
         self.device = self._check_hardware()
         self._update_progress(5, "正在加载数据集...")
@@ -81,21 +94,29 @@ class ContentBasedRecommender:
             self._preprocess_data()
             self._init_model()
         else:
-            print("[WARN] 推荐引擎初始化失败: 数据集为空")
+            logger.warning("推荐引擎初始化失败: 数据集为空")
+        # Fallback matching mode: strict by default (match artist exactly),
+        # can be overridden by constructor arg or environment variable RECOMMENDER_FALLBACK_LOOSE=1
+        env_loose = os.getenv('RECOMMENDER_FALLBACK_LOOSE', '').lower() in ('1', 'true', 'yes')
+        if fallback_loose is None:
+            self.fallback_loose = env_loose
+        else:
+            self.fallback_loose = bool(fallback_loose)
+        logger.info(f"Fallback loose matching: {self.fallback_loose}")
 
     def _update_progress(self, percent, message):
         if self.progress_callback:
             self.progress_callback(percent, message)
 
     def _check_hardware(self):
-        print("[INFO] 正在检测硬件环境...")
+        logger.info("正在检测硬件环境...")
         if torch.cuda.is_available():
             device = torch.device("cuda")
-            print(f"[SUCCESS] 发现 GPU 加速: {torch.cuda.get_device_name(0)}")
+            logger.info(f"发现 GPU 加速: {torch.cuda.get_device_name(0)}")
             self._update_progress(3, f"GPU 加速已开启 ({torch.cuda.get_device_name(0)})")
         else:
             device = torch.device("cpu")
-            print("[INFO] 未发现 GPU，将使用 CPU 进行训练")
+            logger.info("未发现 GPU，将使用 CPU 进行训练")
             self._update_progress(3, "使用 CPU 进行训练 (未检测到 GPU)")
         return device
 
@@ -104,7 +125,7 @@ class ContentBasedRecommender:
         # 数据清洗
         for col in self.feature_cols:
             if col not in self.df.columns:
-                print(f"[WARN] 缺失列: {col}，尝试填充 0")
+                logger.warning(f"缺失列: {col}，尝试填充 0")
                 self.df[col] = 0
                 
         self.df = self.df.dropna(subset=self.feature_cols)
@@ -113,7 +134,7 @@ class ContentBasedRecommender:
         self.df = self.df.dropna(subset=self.feature_cols)
         
         # 优化: 处理离群值 (Outliers)
-        print("[INFO] 正在处理数据离群值...")
+        logger.info("正在处理数据离群值...")
         for col in self.feature_cols:
             time.sleep(0.05) # 让出 CPU
             lower = self.df[col].quantile(0.01)
@@ -125,14 +146,14 @@ class ContentBasedRecommender:
             try:
                 with open(self.scaler_path, 'rb') as f:
                     self.scaler = pickle.load(f)
-                print("[INFO] [Step 1] 加载预训练的特征缩放器...")
+                logger.info("[Step 1] 加载预训练的特征缩放器...")
                 self.scaled_features = self.scaler.transform(self.df[self.feature_cols])
                 self._update_progress(15, "特征缩放完成...")
                 return
             except Exception as e:
-                print(f"[WARN] 加载 Scaler 失败: {e}，将重新拟合。")
+                logger.warning(f"加载 Scaler 失败: {e}，将重新拟合。")
 
-        print("[INFO] [Step 1] 数据预处理: 将音频特征归一化到 [0, 1] 区间...")
+        logger.info("[Step 1] 数据预处理: 将音频特征归一化到 [0, 1] 区间...")
         self.scaled_features = self.scaler.fit_transform(self.df[self.feature_cols])
         with open(self.scaler_path, 'wb') as f:
             pickle.dump(self.scaler, f)
@@ -140,38 +161,38 @@ class ContentBasedRecommender:
 
     def _init_model(self):
         self._update_progress(20, "初始化深度学习模型架构 (MLP Autoencoder)...")
-        print("[INFO] [Step 2] 初始化 MLP Autoencoder...")
+        logger.info("[Step 2] 初始化 MLP Autoencoder...")
         
         input_dim = self.scaled_features.shape[1]
         self.model = Autoencoder(input_dim=input_dim).to(self.device)
         
         # 尝试加载预训练模型
         if os.path.exists(self.model_weights_path) and os.path.exists(self.embeddings_path):
-            print("[INFO] 发现预训练模型，正在加载...")
+            logger.info("发现预训练模型，正在加载...")
             try:
                 state_dict = torch.load(self.model_weights_path, map_location=self.device, weights_only=True)
-                
+
                 # 检查维度
                 saved_input_dim = state_dict['encoder.0.weight'].shape[1]
                 if saved_input_dim != input_dim:
-                    print(f"[WARN] 模型输入维度不匹配 (Saved: {saved_input_dim}, Current: {input_dim})，将重新训练...")
+                    logger.warning(f"模型输入维度不匹配 (Saved: {saved_input_dim}, Current: {input_dim})，将重新训练...")
                     raise ValueError("Input dimension mismatch")
 
                 self.model.load_state_dict(state_dict)
                 self.model.eval()
-                
+
                 self.embeddings = np.load(self.embeddings_path)
-                
+
                 if len(self.embeddings) == len(self.df):
-                    print(f"[SUCCESS] 模型加载完成。已索引 {len(self.df)} 首歌曲。")
+                    logger.info(f"[SUCCESS] 模型加载完成。已索引 {len(self.df)} 首歌曲。")
                     self._update_progress(100, "模型加载完成！")
                     return
                 else:
-                    print(f"[WARN] 数据集大小已变更，将重新训练...")
+                    logger.warning("数据集大小已变更，将重新训练...")
             except Exception as e:
-                print(f"[WARN] 加载模型失败 ({e})，将重新训练...")
+                logger.warning(f"加载模型失败 ({e})，将重新训练...")
 
-        print("[INFO] [Step 3] 开始训练 MLP Autoencoder...")
+        logger.info("[Step 3] 开始训练 MLP Autoencoder...")
         self._update_progress(25, "准备训练数据...")
         
         train_data = torch.FloatTensor(self.scaled_features)
@@ -207,17 +228,17 @@ class ContentBasedRecommender:
             avg_loss = total_loss / len(dataloader)
             
             if np.isnan(avg_loss):
-                print(f"[ERROR] 训练出现异常: Loss 变为 NaN (Epoch {epoch+1})")
+                logger.error(f"训练出现异常: Loss 变为 NaN (Epoch {epoch+1})")
                 break
 
             p = 30 + int((epoch + 1) / epochs * 50)
             self._update_progress(p, f"正在训练神经网络 (Epoch {epoch+1}/{epochs})... Loss: {avg_loss:.6f}")
 
-        print("[INFO] 保存模型权重...")
+        logger.info("保存模型权重...")
         self._update_progress(85, "保存模型权重...")
         torch.save(self.model.state_dict(), self.model_weights_path)
-        
-        print("[INFO] [Step 4] 生成全库音乐指纹 (Embeddings)...")
+
+        logger.info("[Step 4] 生成全库音乐指纹 (Embeddings)...")
         self._update_progress(90, "生成全库音乐指纹...")
         
         self.model.eval()
@@ -233,7 +254,7 @@ class ContentBasedRecommender:
         self.embeddings = np.concatenate(embeddings_list, axis=0)
         np.save(self.embeddings_path, self.embeddings)
         
-        print(f"[SUCCESS] 推荐系统就绪。已索引 {len(self.df)} 首歌曲。")
+        logger.info(f"[SUCCESS] 推荐系统就绪。已索引 {len(self.df)} 首歌曲。")
         self._update_progress(100, "初始化完成！")
 
     def recommend(self, seed_track_infos, limit=50):
@@ -243,9 +264,7 @@ class ContentBasedRecommender:
         - 列表字符串 id：['id1','id2',...]
         - 列表字典：[{ 'id':..., 'name':..., 'artist':... }, ...]
         """
-        print("\n" + "="*50)
-        print("启动智能推荐流程 (MLP Autoencoder - Max Sim)")
-        print("="*50)
+        logger.info("启动智能推荐流程 (MLP Autoencoder - Max Sim)")
 
         if self.df is None or self.embeddings is None or not seed_track_infos:
             return []
@@ -270,12 +289,9 @@ class ContentBasedRecommender:
         # Normalize to strings
         seed_ids = [str(x) for x in seed_ids]
 
-        # DEBUG: 打印输入信息以便排查匹配问题
-        try:
-            print(f"[DEBUG] 原始 seed_track_infos: {seed_track_infos}")
-            print(f"[DEBUG] 解析后 seed_ids: {seed_ids}")
-        except Exception:
-            pass
+        # DEBUG: 记录输入信息以便排查匹配问题
+        logger.debug(f"原始 seed_track_infos: {seed_track_infos}")
+        logger.debug(f"解析后 seed_ids: {seed_ids}")
 
         # Check which seed ids exist in dataset
         seed_mask = self.df.index.isin(seed_ids)
@@ -283,10 +299,7 @@ class ContentBasedRecommender:
         # If some provided ids are not found, attempt to fallback by name+artist when available
         missing_ids = [sid for sid in seed_ids if sid not in list(self.df.index)]
         if missing_ids:
-            try:
-                print(f"[DEBUG] 缺失的 ids: {missing_ids}")
-            except Exception:
-                pass
+            logger.debug(f"缺失的 ids: {missing_ids}")
         if missing_ids:
             # Build a map from provided infos if available
             id_map = {}
@@ -306,29 +319,45 @@ class ContentBasedRecommender:
                     name, artist = id_map[mid]
                     try:
                         row = ds.get_track_features_by_name(name, artist)
-                        print(f"[DEBUG] 回退查找 for id={mid}, name={name}, artist={artist} -> row: {row}")
+                        logger.debug(f"回退查找 for id={mid}, name={name}, artist={artist} -> row: {row}")
                         if row and row.get('id'):
-                            found_id = str(row.get('id'))
-                            seed_ids.append(found_id)
-                            print(f"[DEBUG] 回退匹配成功: {mid} -> {found_id}")
+                            # Enforce strict or loose artist matching depending on configuration
+                            db_artist = str(row.get('artist_name', '')).strip().lower()
+                            target_artist = str(artist).strip().lower() if artist else ''
+                            matched = False
+                            if self.fallback_loose:
+                                # Loose: accept if either contains the other
+                                if target_artist and (target_artist in db_artist or db_artist in target_artist):
+                                    matched = True
+                            else:
+                                # Strict: require exact match (case-insensitive)
+                                if db_artist and target_artist and db_artist == target_artist:
+                                    matched = True
+
+                            if matched:
+                                found_id = str(row.get('id'))
+                                seed_ids.append(found_id)
+                                logger.debug(f"回退匹配成功: {mid} -> {found_id} (db_artist={db_artist}, target={target_artist})")
+                            else:
+                                logger.debug(f"回退匹配被拒绝(严格模式): {mid} (db_artist={db_artist}, target={target_artist})")
                     except Exception as e:
-                        print(f"[DEBUG] 回退查找失败 for {mid}: {e}")
+                        logger.debug(f"回退查找失败 for {mid}: {e}")
 
         # Recompute mask after possible fallbacks
         seed_mask = self.df.index.isin(seed_ids)
         if not np.any(seed_mask):
-            print("[WARN] 歌单中的歌曲未在数据库中找到。")
+            logger.warning("歌单中的歌曲未在数据库中找到。")
             return self.df.sample(limit).to_dict('records')
 
-        print(f"[Step 1] 输入分析: 识别到 {np.sum(seed_mask)} 首有效种子歌曲。")
+        logger.info(f"[Step 1] 输入分析: 识别到 {np.sum(seed_mask)} 首有效种子歌曲。")
         # 2. Latent Mapping
         seed_vectors = self.embeddings[seed_mask]
-        print(f"[Step 2] 深度编码: 已将种子歌曲映射到 32维 潜在风格空间。")
+        logger.info(f"[Step 2] 深度编码: 已将种子歌曲映射到 32维 潜在风格空间。")
 
         # 3. Similarity Search (Max Similarity Strategy)
         # 策略变更: 不再计算平均口味，而是为每首种子歌曲寻找相似歌曲，然后取最大值。
         # 这能更好地保留歌单的多样性 (例如同时包含古典和金属)。
-        print("[Step 3] 全库检索: 正在计算相似度 (Max Strategy)...")
+        logger.info("[Step 3] 全库检索: 正在计算相似度 (Max Strategy)...")
         
         from sklearn.preprocessing import normalize
         
@@ -359,7 +388,7 @@ class ContentBasedRecommender:
         recommendations = self.df.iloc[top_indices]
         
         top_score = scores[top_indices][0]
-        print(f"[SUCCESS] 推荐生成完毕! 最佳匹配度: {top_score:.4f}")
-        print("="*50 + "\n")
+        logger.info(f"[SUCCESS] 推荐生成完毕! 最佳匹配度: {top_score:.4f}")
+        logger.debug("="*50 + "\n")
         
         return recommendations.to_dict('records')
