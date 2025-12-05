@@ -474,15 +474,20 @@ def recommend_from_playlist():
             results = sp_user.next(results)
             tracks.extend(results['items'])
             
-        track_ids = [item['track']['id'] for item in tracks if item['track'] and item['track']['id']]
-        
-        # Call the recommender logic (reusing code from previous /recommend or implementing here)
-        # Let's implement it cleanly here
+        # Build seed infos (id, name, artist) so recommender can fallback to name+artist matching
+        seed_infos = []
+        for item in tracks:
+            if item['track'] and item['track']['id'] and item['track']['type'] == 'track':
+                seed_infos.append({
+                    'id': item['track']['id'],
+                    'name': item['track']['name'],
+                    'artist': item['track']['artists'][0]['name'] if item['track'].get('artists') else None
+                })
+
         from recommender import ContentBasedRecommender
         recommender = ContentBasedRecommender()
-        
-        # For playlist wrapper we can pass simple id list (backwards compatible)
-        rec_results = recommender.recommend(track_ids, limit=50)
+
+        rec_results = recommender.recommend(seed_infos, limit=50)
         
         rec_tracks = []
         if rec_results:
