@@ -303,7 +303,7 @@ def recommend():
             except:
                 pass
 
-            return render_template('results.html', tracks=rec_tracks, user_profile=user_profile)
+            return render_template('results.html', tracks=rec_tracks, user_profile=user_profile, playlist_id=playlist_id)
             
         else:
             print("[WARN] 推荐算法未返回任何结果 (可能是种子歌曲都不在数据库中)")
@@ -531,7 +531,7 @@ def recommend_from_playlist():
             except:
                 pass
 
-            return render_template('results.html', tracks=rec_tracks, user_profile=user_profile)
+            return render_template('results.html', tracks=rec_tracks, user_profile=user_profile, playlist_id=playlist_id)
         else:
              return render_template('error.html', message="无法生成推荐：您的歌单中的歌曲似乎都不在我们的离线数据库中。")
 
