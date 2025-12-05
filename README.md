@@ -1,4 +1,4 @@
-# Spotify Recommender (Local)
+# Spotify Recommender 
 
 一个本地的 Spotify 风格推荐演示项目，旨在展示如何基于音频特征实现内容推荐。
 
@@ -29,6 +29,16 @@
    git clone https://github.com/KissLoveOrKill/Spotify-Recommendation-System.git
    cd Spotify-Recommendation-System
    ```
+
+## 获取 Spotify API 凭证
+
+- 如果你还没有 Spotify Developer 账户或应用，请先前往开发者控制台创建应用：
+
+   https://developer.spotify.com/dashboard/applications
+
+- 创建应用后，在应用设置中添加重定向 URI：`http://127.0.0.1:5000/callback`（与本项目 `SPOTIPY_REDIRECT_URI` 保持一致）。
+- 在应用详情页复制 `Client ID` 和 `Client Secret`，并填入本地 `.env`（见下一节）。
+
 
 2. **配置环境变量**
 
@@ -89,7 +99,7 @@ Test-Path "spotify_rec_system\\data\\dataset.csv"
 
 ## 技术栈
 
-- **后端**：Flask
+- **前端**：Flask
 - **机器学习**：PyTorch
 - **数据库**：本地 CSV 文件
 - **推荐算法**：MLP Autoencoder + 向量相似度搜索
