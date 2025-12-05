@@ -28,6 +28,8 @@ spotify_rec_system/data/dataset.csv
 model_cache/
 # Allow keeping a placeholder in the recommender module so directory structure is preserved
 !spotify_rec_system/model_cache/
+# But ignore all files inside that model_cache folder except the .gitkeep placeholder
+spotify_rec_system/model_cache/*
 !spotify_rec_system/model_cache/.gitkeep
 *.pth
 *.pt
