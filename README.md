@@ -16,7 +16,7 @@
 - `spotify_rec_system/dataset_service.py` - 数据加载服务，支持从 CSV 文件加载离线数据。
 - `spotify_rec_system/templates/` - 前端模板文件夹，包含 HTML 页面。
 - `spotify_rec_system/data/` - 本地数据存储文件夹（如歌曲特征数据集）。
-- 
+
 ## 快速开始
 
 以下是本地运行项目的完整流程，无需泄露任何个人信息：
@@ -69,6 +69,23 @@
 - **安全性**：
   - 请勿在公共仓库中泄露 API 密钥或其他敏感信息。
   - 使用 `.env` 文件管理本地开发环境的敏感配置。
+
+## 数据集（下载与解压）
+
+- 本项目的离线歌曲特征数据应放在 `spotify_rec_system/data/dataset.csv`。
+- 为避免直接将超大 CSV 推送到仓库，建议在仓库中保留压缩包 `spotify_rec_system/data/dataset.zip`，并在本地解压使用。
+- 若仓库中已有 `dataset.zip`（或你已从外部下载），请在项目根目录通过 PowerShell 解压：
+
+```powershell
+# 在项目根目录运行（Windows PowerShell）
+Expand-Archive -Path "spotify_rec_system\\data\\dataset.zip" -DestinationPath "spotify_rec_system\\data" -Force
+
+# 解压后验证 CSV 是否存在：
+Test-Path "spotify_rec_system\\data\\dataset.csv"
+```
+
+- 如果你从外部下载数据集，请将 `dataset.csv` 放到 `spotify_rec_system/data/` 下并确保文件名为 `dataset.csv`。
+- 注意：数据集可能较大，推荐使用云存储（Google Drive、OneDrive 等）分享下载链接，或使用 Git LFS 管理大文件。
 
 ## 技术栈
 
