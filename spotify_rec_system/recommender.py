@@ -270,11 +270,23 @@ class ContentBasedRecommender:
         # Normalize to strings
         seed_ids = [str(x) for x in seed_ids]
 
+        # DEBUG: 打印输入信息以便排查匹配问题
+        try:
+            print(f"[DEBUG] 原始 seed_track_infos: {seed_track_infos}")
+            print(f"[DEBUG] 解析后 seed_ids: {seed_ids}")
+        except Exception:
+            pass
+
         # Check which seed ids exist in dataset
         seed_mask = self.df.index.isin(seed_ids)
 
         # If some provided ids are not found, attempt to fallback by name+artist when available
         missing_ids = [sid for sid in seed_ids if sid not in list(self.df.index)]
+        if missing_ids:
+            try:
+                print(f"[DEBUG] 缺失的 ids: {missing_ids}")
+            except Exception:
+                pass
         if missing_ids:
             # Build a map from provided infos if available
             id_map = {}
@@ -294,11 +306,13 @@ class ContentBasedRecommender:
                     name, artist = id_map[mid]
                     try:
                         row = ds.get_track_features_by_name(name, artist)
+                        print(f"[DEBUG] 回退查找 for id={mid}, name={name}, artist={artist} -> row: {row}")
                         if row and row.get('id'):
                             found_id = str(row.get('id'))
                             seed_ids.append(found_id)
-                    except Exception:
-                        pass
+                            print(f"[DEBUG] 回退匹配成功: {mid} -> {found_id}")
+                    except Exception as e:
+                        print(f"[DEBUG] 回退查找失败 for {mid}: {e}")
 
         # Recompute mask after possible fallbacks
         seed_mask = self.df.index.isin(seed_ids)
