@@ -16,8 +16,9 @@ venv/
 Thumbs.db
 
 # Sensitive / local configs
+# Ignore real env files but keep `./.env.example` for sharing
 .env
-.env.*
+.env.local
 *.pem
 *.key
 
