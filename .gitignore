@@ -1,4 +1,4 @@
-# Python
+# Python 缓存/编译文件
 __pycache__/
 *.py[cod]
 *.so
@@ -10,41 +10,37 @@ venv/
 .pytest_cache/
 *.pyc
 
-# Editor / OS
+# 编辑器/操作系统临时文件
 .vscode/
 .DS_Store
 Thumbs.db
 
-# Sensitive / local configs
-# Ignore real env files but keep `./.env.example` for sharing
+# 敏感/本地配置（只保留 .env.example，忽略真实密钥文件）
 .env
 .env.local
 *.pem
 *.key
 
-# Data / model artifacts
-# Ignore large raw CSV in the recommender data folder but keep compressed archives
-spotify_rec_system/data/dataset.csv
-model_cache/
-# Allow keeping a placeholder in the recommender module so directory structure is preserved
-!spotify_rec_system/model_cache/
-# But ignore all files inside that model_cache folder except the .gitkeep placeholder
-spotify_rec_system/model_cache/*
-!spotify_rec_system/model_cache/.gitkeep
+# 数据/模型文件（只保留压缩包和结构占位符）
+spotify_rec_system/data/dataset.csv   # 忽略原始大 CSV
+model_cache/                         # 忽略所有模型缓存文件夹
+!spotify_rec_system/model_cache/     # 保留 model_cache 目录结构
+spotify_rec_system/model_cache/*     # 忽略 model_cache 下所有文件
+!spotify_rec_system/model_cache/.gitkeep # 只允许 .gitkeep 占位
 *.pth
 *.pt
 *.npy
 *.ckpt
 *.h5
 
-# Logs and temporary
+# 日志和临时文件
 logs/
 *.log
 
-# Virtual env folders
+# 虚拟环境文件夹
 .venv/
 venv/
 ENV/
 
-# Git LFS attributes
+# Git LFS 属性文件
 .gitattributes
