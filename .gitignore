@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+*.pyc
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Sensitive / local configs
+.env
+.env.*
+*.pem
+*.key
+
+# Data / model artifacts
+# Ignore large raw CSV in the recommender data folder but keep compressed archives
+spotify_rec_system/data/dataset.csv
+model_cache/
+*.pth
+*.pt
+*.npy
+*.ckpt
+*.h5
+
+# Logs and temporary
+logs/
+*.log
+
+# Virtual env folders
+.venv/
+venv/
+ENV/
+
+# Git LFS attributes
+.gitattributes

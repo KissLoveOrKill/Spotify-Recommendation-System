@@ -1,0 +1,5 @@
+Flask
+spotipy
+pandas
+python-dotenv
+requests
